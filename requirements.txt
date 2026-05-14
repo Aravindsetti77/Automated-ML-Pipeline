@@ -1,0 +1,15 @@
+# Core ML & Data
+pandas
+numpy
+scikit-learn
+joblib
+
+# MLOps & Tracking
+mlflow
+dvc
+evidently
+
+# Serving & API
+fastapi
+uvicorn
+pydantic
