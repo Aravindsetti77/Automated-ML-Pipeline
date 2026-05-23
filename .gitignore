@@ -1,0 +1,30 @@
+# Data files
+*.csv
+Data/
+
+# Machine Learning Models
+*.joblib
+*.pkl
+*.h5
+*.pt
+model/
+
+# MLflow tracking
+mlruns/
+mlruns.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# OS generated files
+.DS_Store
+Thumbs.db

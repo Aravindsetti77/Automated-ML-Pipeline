@@ -1,0 +1,35 @@
+name: MLOps Training Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  train-and-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+        
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Generate Synthetic Data (for CI testing)
+      run: python Script/generate_data.py
+        
+    - name: Train AI Model
+      run: python Script/train.py
+        
+    - name: Publish Metrics to GitHub Summary
+      run: cat metrics.md >> $GITHUB_STEP_SUMMARY
