@@ -4,6 +4,9 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.svm import SVR
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import os
@@ -22,12 +25,14 @@ def model_train():
     
     target_var = os.environ.get("TARGET_VARIABLE", "Stock Price")
     model_type = os.environ.get("MODEL_TYPE", "RandomForest")
+    visualization_type = os.environ.get("VISUALIZATION_TYPE", "Scatter Plot")
     ticker = os.environ.get("TICKER", "AAPL")
     
     mlflow.set_experiment(f"Financial_Prediction")
     with mlflow.start_run():
         mlflow.set_tag("Target", target_var)
         mlflow.set_tag("Model", model_type)
+        mlflow.set_tag("Visualization", visualization_type)
         mlflow.set_tag("Ticker", ticker)
         
         print(f"Loading data from {config['data']['raw_data_path']}...")
@@ -59,6 +64,15 @@ def model_train():
         elif model_type == "LinearRegression":
             estimator = LinearRegression()
             param_grid = config['train']['param_grids'].get('LinearRegression', {})
+        elif model_type == "SVR":
+            estimator = SVR()
+            param_grid = config['train']['param_grids'].get('SVR', {})
+        elif model_type == "KNeighbors":
+            estimator = KNeighborsRegressor()
+            param_grid = config['train']['param_grids'].get('KNeighbors', {})
+        elif model_type == "DecisionTree":
+            estimator = DecisionTreeRegressor(random_state=random_state)
+            param_grid = config['train']['param_grids'].get('DecisionTree', {})
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
             
@@ -108,17 +122,38 @@ def model_train():
             os.makedirs(reports_dir)
             
         plt.figure(figsize=(10, 6))
-        sns.scatterplot(x=y_test, y=predictions, alpha=0.6, color='blue', label='Predictions')
         
-        # Plot perfect prediction line
-        min_val = min(y_test.min(), predictions.min())
-        max_val = max(y_test.max(), predictions.max())
-        plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='Perfect Prediction')
-        
-        plt.title(f"Actual vs Predicted {target_var} ({ticker}) - {model_type}")
-        plt.xlabel("Actual Values")
-        plt.ylabel("Predicted Values")
-        plt.legend()
+        if visualization_type == "Scatter Plot":
+            sns.scatterplot(x=y_test, y=predictions, alpha=0.6, color='blue', label='Predictions')
+            min_val = min(y_test.min(), predictions.min())
+            max_val = max(y_test.max(), predictions.max())
+            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='Perfect Prediction')
+            plt.title(f"Actual vs Predicted {target_var} ({ticker}) - {model_type}")
+            plt.xlabel("Actual Values")
+            plt.ylabel("Predicted Values")
+            plt.legend()
+            
+        elif visualization_type == "Residual Plot":
+            sns.residplot(x=predictions, y=y_test, color='purple', lowess=True)
+            plt.title(f"Residual Plot for {target_var} ({ticker}) - {model_type}")
+            plt.xlabel("Predicted Values")
+            plt.ylabel("Residuals (Actual - Predicted)")
+            
+        elif visualization_type == "Error Histogram":
+            errors = y_test - predictions
+            sns.histplot(errors, kde=True, color='orange', bins=30)
+            plt.title(f"Prediction Error Distribution ({ticker}) - {model_type}")
+            plt.xlabel("Prediction Error")
+            plt.ylabel("Frequency")
+            
+        elif visualization_type == "Line Chart":
+            plt.plot(y_test.values, label='Actual Values', color='green', marker='o', alpha=0.7)
+            plt.plot(predictions, label='Predicted Values', color='red', marker='x', alpha=0.7)
+            plt.title(f"Actual vs Predicted Line Chart ({ticker}) - {model_type}")
+            plt.xlabel("Test Samples (Chronological Order)")
+            plt.ylabel(f"{target_var}")
+            plt.legend()
+            
         plt.grid(True, alpha=0.3)
         
         plot_path = os.path.join(reports_dir, "prediction_plot.png")

@@ -22,6 +22,19 @@ on:
           - 'RandomForest'
           - 'GradientBoosting'
           - 'LinearRegression'
+          - 'SVR'
+          - 'KNeighbors'
+          - 'DecisionTree'
+      visualization_type:
+        description: 'Graph Visualization'
+        required: true
+        default: 'Scatter Plot'
+        type: choice
+        options:
+          - 'Scatter Plot'
+          - 'Residual Plot'
+          - 'Error Histogram'
+          - 'Line Chart'
       ticker:
         description: 'Stock Ticker (e.g., AAPL)'
         required: true
@@ -55,6 +68,7 @@ jobs:
       env:
         TARGET_VARIABLE: ${{ github.event.inputs.target_variable || 'Stock Price' }}
         MODEL_TYPE: ${{ github.event.inputs.model_type || 'RandomForest' }}
+        VISUALIZATION_TYPE: ${{ github.event.inputs.visualization_type || 'Scatter Plot' }}
         TICKER: ${{ github.event.inputs.ticker || 'AAPL' }}
       run: python Script/train.py
         
