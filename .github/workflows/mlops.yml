@@ -6,7 +6,29 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
+    inputs:
+      target_variable:
+        description: 'Prediction Target'
+        required: true
+        default: 'Stock Price'
+        type: choice
+        options:
+          - 'Stock Price'
+          - 'Revenue'
+      model_type:
+        description: 'Model to Train'
+        required: true
+        default: 'RandomForest'
+        type: choice
+        options:
+          - 'RandomForest'
+          - 'GradientBoosting'
+          - 'LinearRegression'
+      ticker:
+        description: 'Stock Ticker (e.g., AAPL)'
+        required: true
+        default: 'AAPL'
+        type: string
 jobs:
   train-and-report:
     runs-on: ubuntu-latest
@@ -25,10 +47,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Generate Synthetic Data (for CI testing)
-      run: python Script/generate_data.py
+    - name: Fetch Financial Data
+      env:
+        TARGET_VARIABLE: ${{ github.event.inputs.target_variable || 'Stock Price' }}
+        TICKER: ${{ github.event.inputs.ticker || 'AAPL' }}
+      run: python Script/fetch_data.py
         
     - name: Train AI Model
+      env:
+        TARGET_VARIABLE: ${{ github.event.inputs.target_variable || 'Stock Price' }}
+        MODEL_TYPE: ${{ github.event.inputs.model_type || 'RandomForest' }}
+        TICKER: ${{ github.event.inputs.ticker || 'AAPL' }}
       run: python Script/train.py
         
     - name: Publish Metrics to GitHub Summary

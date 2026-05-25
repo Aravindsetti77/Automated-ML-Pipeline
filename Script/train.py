@@ -2,11 +2,14 @@ import mlflow
 import mlflow.sklearn
 from sklearn.model_selection import GridSearchCV, train_test_split
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import os
 import yaml
+import math
+import json
 
 def load_config(config_path="config.yaml"):
     with open(config_path, "r") as file:
@@ -15,11 +18,22 @@ def load_config(config_path="config.yaml"):
 def model_train():
     config = load_config()
     
-    mlflow.set_experiment("credit_card_fraud_detection")
+    target_var = os.environ.get("TARGET_VARIABLE", "Stock Price")
+    model_type = os.environ.get("MODEL_TYPE", "RandomForest")
+    ticker = os.environ.get("TICKER", "AAPL")
+    
+    mlflow.set_experiment(f"Financial_Prediction")
     with mlflow.start_run():
-        print(f"Loading data from {config['data']['raw_data_path']}...")
-        data = pd.read_csv(config['data']['raw_data_path'])
+        mlflow.set_tag("Target", target_var)
+        mlflow.set_tag("Model", model_type)
+        mlflow.set_tag("Ticker", ticker)
         
+        print(f"Loading data from {config['data']['raw_data_path']}...")
+        try:
+            data = pd.read_csv(config['data']['raw_data_path'])
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Data not found. Did you run fetch_data.py?")
+            
         target_col = config['train']['target_column']
         X = data.drop([target_col], axis=1)
         y = data[target_col]
@@ -27,25 +41,35 @@ def model_train():
         test_size = config['train']['test_size']
         random_state = config['train']['random_state']
         
+        # We don't stratify for regression
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
+            X, y, test_size=test_size, random_state=random_state
         )
         
-        param_grid = config['train']['param_grid']
+        print(f"Training {model_type}...")
         
-        print("Starting Grid Search...")
-        rf = RandomForestClassifier(random_state=random_state, class_weight='balanced')
+        if model_type == "RandomForest":
+            estimator = RandomForestRegressor(random_state=random_state)
+            param_grid = config['train']['param_grids'].get('RandomForest', {})
+        elif model_type == "GradientBoosting":
+            estimator = GradientBoostingRegressor(random_state=random_state)
+            param_grid = config['train']['param_grids'].get('GradientBoosting', {})
+        elif model_type == "LinearRegression":
+            estimator = LinearRegression()
+            param_grid = config['train']['param_grids'].get('LinearRegression', {})
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
+            
         grid_search = GridSearchCV(
-            estimator=rf,
+            estimator=estimator,
             param_grid=param_grid,
-            cv=3,  # Reduced cv for faster training on large dataset
-            scoring="f1",
+            cv=3,
+            scoring="neg_mean_squared_error",
             n_jobs=-1,
             verbose=2
         )
         
         grid_search.fit(X_train, y_train)
-        
         best_model = grid_search.best_estimator_
         
         best_params = grid_search.best_params_
@@ -53,32 +77,43 @@ def model_train():
         
         print("Evaluating Model...")
         predictions = best_model.predict(X_test)
-        predict_proba = best_model.predict_proba(X_test)[:, 1]
+        
+        mse = mean_squared_error(y_test, predictions)
+        rmse = math.sqrt(mse)
+        mae = mean_absolute_error(y_test, predictions)
+        r2 = r2_score(y_test, predictions)
         
         metrics = {
-            "f1_score": f1_score(y_test, predictions),
-            "precision": precision_score(y_test, predictions),
-            "recall": recall_score(y_test, predictions),
-            "roc_auc": roc_auc_score(y_test, predict_proba)
+            "mse": mse,
+            "rmse": rmse,
+            "mae": mae,
+            "r2": r2
         }
+        
         mlflow.log_metrics(metrics)
         print(f"Metrics: {metrics}")
         
-        # Write metrics to a markdown file for GitHub Actions Summary
-        metrics_md = f"""## 📊 Model Training Metrics
+        formatted_params = json.dumps(best_params, indent=2)
+        metrics_md = f"""## 📊 Financial Prediction Metrics ({target_var})
+### 📈 Ticker: {ticker} | 🤖 Model: {model_type}
 
 | Metric | Score |
 |---|---|
-| **F1 Score** | `{metrics['f1_score']:.4f}` |
-| **Precision** | `{metrics['precision']:.4f}` |
-| **Recall** | `{metrics['recall']:.4f}` |
-| **ROC AUC** | `{metrics['roc_auc']:.4f}` |
+| **R² Score** | `{r2:.4f}` |
+| **RMSE** | `{rmse:.4f}` |
+| **MAE** | `{mae:.4f}` |
+| **MSE** | `{mse:.4f}` |
+
+### 🛠️ Best Hyperparameters
+```json
+{formatted_params}
+```
 """
         with open("metrics.md", "w", encoding="utf-8") as f:
             f.write(metrics_md)
         print("Exported metrics to metrics.md")
         
-        mlflow.sklearn.log_model(best_model, "fraud_rf_model")
+        mlflow.sklearn.log_model(best_model, "financial_model")
         
         model_dir = config['model']['model_dir']
         model_path = config['model']['model_path']
