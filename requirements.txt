@@ -11,7 +11,6 @@ seaborn>=0.12.0
 PyYAML>=6.0.1
 
 # MLOps & Tracking
-mlflow>=2.6.0
 dvc>=3.15.0
 evidently>=0.4.28
 
