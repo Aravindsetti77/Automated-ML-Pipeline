@@ -10,6 +10,8 @@ import os
 import yaml
 import math
 import json
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def load_config(config_path="config.yaml"):
     with open(config_path, "r") as file:
@@ -99,6 +101,32 @@ def model_train():
         
         mlflow.log_metrics(metrics)
         print(f"Metrics: {metrics}")
+        
+        # Generate Plot
+        reports_dir = config.get('reports', {}).get('dir', 'reports')
+        if not os.path.exists(reports_dir):
+            os.makedirs(reports_dir)
+            
+        plt.figure(figsize=(10, 6))
+        sns.scatterplot(x=y_test, y=predictions, alpha=0.6, color='blue', label='Predictions')
+        
+        # Plot perfect prediction line
+        min_val = min(y_test.min(), predictions.min())
+        max_val = max(y_test.max(), predictions.max())
+        plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='Perfect Prediction')
+        
+        plt.title(f"Actual vs Predicted {target_var} ({ticker}) - {model_type}")
+        plt.xlabel("Actual Values")
+        plt.ylabel("Predicted Values")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        plot_path = os.path.join(reports_dir, "prediction_plot.png")
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        mlflow.log_artifact(plot_path)
+        print(f"Prediction plot saved to {plot_path}")
         
         formatted_params = json.dumps(best_params, indent=2)
         metrics_md = f"""## 📊 Financial Prediction Metrics ({target_var})
