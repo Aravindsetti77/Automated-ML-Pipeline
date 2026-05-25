@@ -60,19 +60,26 @@ def model_train():
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
             
-        grid_search = GridSearchCV(
-            estimator=estimator,
-            param_grid=param_grid,
-            cv=3,
-            scoring="neg_mean_squared_error",
-            n_jobs=-1,
-            verbose=2
-        )
+        n_samples = len(X_train)
+        cv_splits = min(3, max(2, n_samples))
         
-        grid_search.fit(X_train, y_train)
-        best_model = grid_search.best_estimator_
-        
-        best_params = grid_search.best_params_
+        if n_samples < 2:
+            print("Dataset too small for Cross-Validation. Training model directly.")
+            best_model = estimator
+            best_model.fit(X_train, y_train)
+            best_params = {}
+        else:
+            grid_search = GridSearchCV(
+                estimator=estimator,
+                param_grid=param_grid,
+                cv=cv_splits,
+                scoring="neg_mean_squared_error",
+                n_jobs=-1,
+                verbose=2
+            )
+            grid_search.fit(X_train, y_train)
+            best_model = grid_search.best_estimator_
+            best_params = grid_search.best_params_
         mlflow.log_params(best_params)
         
         print("Evaluating Model...")
