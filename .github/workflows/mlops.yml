@@ -2,7 +2,7 @@ name: MLOps Training Pipeline
 
 on:
   schedule:
-    - cron: '30 6 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       target_variable:
@@ -16,9 +16,10 @@ on:
       model_type:
         description: 'Model to Train'
         required: true
-        default: 'RandomForest'
+        default: 'Auto'
         type: choice
         options:
+          - 'Auto'
           - 'RandomForest'
           - 'GradientBoosting'
           - 'LinearRegression'

@@ -22,7 +22,7 @@ def model_train():
     config = load_config()
     
     target_var = os.environ.get("TARGET_VARIABLE", "Stock Price")
-    model_type = os.environ.get("MODEL_TYPE", "RandomForest")
+    model_type = os.environ.get("MODEL_TYPE", "Auto")
     visualization_type = os.environ.get("VISUALIZATION_TYPE", "Scatter Plot")
     ticker = os.environ.get("TICKER", "AAPL")
     
@@ -46,49 +46,65 @@ def model_train():
     
     print(f"Training {model_type}...")
     
-    if model_type == "RandomForest":
-        estimator = RandomForestRegressor(random_state=random_state)
-        param_grid = config['train']['param_grids'].get('RandomForest', {})
-    elif model_type == "GradientBoosting":
-        estimator = GradientBoostingRegressor(random_state=random_state)
-        param_grid = config['train']['param_grids'].get('GradientBoosting', {})
-    elif model_type == "LinearRegression":
-        estimator = LinearRegression()
-        param_grid = config['train']['param_grids'].get('LinearRegression', {})
-    elif model_type == "SVR":
-        estimator = SVR()
-        param_grid = config['train']['param_grids'].get('SVR', {})
-    elif model_type == "KNeighbors":
-        estimator = KNeighborsRegressor()
-        param_grid = config['train']['param_grids'].get('KNeighbors', {})
-    elif model_type == "DecisionTree":
-        estimator = DecisionTreeRegressor(random_state=random_state)
-        param_grid = config['train']['param_grids'].get('DecisionTree', {})
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-        
+    available_models = {
+        "RandomForest": RandomForestRegressor(random_state=random_state),
+        "GradientBoosting": GradientBoostingRegressor(random_state=random_state),
+        "LinearRegression": LinearRegression(),
+        "SVR": SVR(),
+        "KNeighbors": KNeighborsRegressor(),
+        "DecisionTree": DecisionTreeRegressor(random_state=random_state)
+    }
+    
+    best_overall_model = None
+    best_overall_params = {}
+    best_overall_r2 = -float('inf')
+    best_model_name = ""
+    
     n_samples = len(X_train)
     cv_splits = min(3, max(2, n_samples))
     
-    if n_samples < 2:
-        print("Dataset too small for Cross-Validation. Training model directly.")
-        best_model = estimator
-        best_model.fit(X_train, y_train)
-        best_params = {}
-    else:
-        grid_search = GridSearchCV(
-            estimator=estimator,
-            param_grid=param_grid,
-            cv=cv_splits,
-            scoring="neg_mean_squared_error",
-            n_jobs=-1,
-            verbose=2
-        )
-        grid_search.fit(X_train, y_train)
-        best_model = grid_search.best_estimator_
-        best_params = grid_search.best_params_
+    models_to_evaluate = ["RandomForest", "GradientBoosting", "LinearRegression", "DecisionTree"] if model_type == "Auto" else [model_type]
     
-    print("Evaluating Model...")
+    for m_name in models_to_evaluate:
+        print(f"Evaluating {m_name}...")
+        estimator = available_models[m_name]
+        param_grid = config['train']['param_grids'].get(m_name, {})
+        
+        if m_name not in available_models:
+            raise ValueError(f"Unsupported model type: {m_name}")
+            
+        if n_samples < 2:
+            model = estimator
+            model.fit(X_train, y_train)
+            params = {}
+        else:
+            grid_search = GridSearchCV(
+                estimator=estimator,
+                param_grid=param_grid,
+                cv=cv_splits,
+                scoring="neg_mean_squared_error",
+                n_jobs=-1,
+                verbose=0
+            )
+            grid_search.fit(X_train, y_train)
+            model = grid_search.best_estimator_
+            params = grid_search.best_params_
+            
+        preds = model.predict(X_test)
+        r2 = r2_score(y_test, preds)
+        
+        if r2 > best_overall_r2:
+            best_overall_r2 = r2
+            best_overall_model = model
+            best_overall_params = params
+            best_model_name = m_name
+
+    best_model = best_overall_model
+    best_params = best_overall_params
+    model_type = best_model_name
+    
+    print(f"Selected Model: {model_type}")
+    
     predictions = best_model.predict(X_test)
     
     mse = mean_squared_error(y_test, predictions)
@@ -151,10 +167,25 @@ def model_train():
     
     print(f"Prediction plot saved to {plot_path}")
     
+    # Make Prediction on Latest Data
+    data_dir = os.path.dirname(config['data']['raw_data_path'])
+    latest_data_path = os.path.join(data_dir, "latest_data.csv")
+    latest_price_info = ""
+    if os.path.exists(latest_data_path):
+        latest_df = pd.read_csv(latest_data_path)
+        if not latest_df.empty:
+            future_pred = best_model.predict(latest_df)[0]
+            if target_var == "Stock Price" and 'Close' in latest_df.columns:
+                last_known = latest_df['Close'].iloc[-1]
+                latest_price_info = f"\n### 💰 Stock Price Info\n- **Latest Known Close Price**: `${last_known:.2f}`\n- **Predicted Next Day Close**: `${future_pred:.2f}`\n"
+            elif target_var == "Revenue" and 'Total Revenue' in latest_df.columns:
+                last_known = latest_df['Total Revenue'].iloc[-1]
+                latest_price_info = f"\n### 💰 Revenue Info\n- **Latest Known Revenue**: `${last_known:,.2f}`\n- **Predicted Next Quarter Revenue**: `${future_pred:,.2f}`\n"
+
     formatted_params = json.dumps(best_params, indent=2)
     metrics_md = f"""## 📊 Financial Prediction Metrics ({target_var})
 ### 📈 Ticker: {ticker} | 🤖 Model: {model_type}
-
+{latest_price_info}
 | Metric | Score |
 |---|---|
 | **R² Score** | `{r2:.4f}` |

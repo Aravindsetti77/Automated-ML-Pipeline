@@ -21,7 +21,6 @@ def fetch_data():
         hist.reset_index(inplace=True)
         # We want to predict Next Day's Close
         hist['Target'] = hist['Close'].shift(-1)
-        hist.dropna(inplace=True) 
         
         # Select features
         features = ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -45,13 +44,14 @@ def fetch_data():
         
         # Sort chronologically
         revenue = revenue.sort_values('Date').reset_index(drop=True)
-        # Target is next quarter's revenue
-        revenue['Target'] = revenue['Total Revenue'].shift(-1)
-        revenue.dropna(inplace=True)
         
         # Add some historical lags as features to make the model richer than 1 feature
         revenue['Prev_Quarter_Rev'] = revenue['Total Revenue'].shift(1)
-        revenue.dropna(inplace=True)
+        # Drop only the row where Prev_Quarter_Rev is NaN (first row)
+        revenue = revenue.dropna(subset=['Prev_Quarter_Rev'])
+        
+        # Target is next quarter's revenue
+        revenue['Target'] = revenue['Total Revenue'].shift(-1)
         
         df = revenue[['Total Revenue', 'Prev_Quarter_Rev', 'Target']]
         
@@ -62,6 +62,13 @@ def fetch_data():
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
         
+    # Save latest unlabelled data for prediction before dropping
+    latest_row = df.iloc[[-1]].drop(columns=['Target'])
+    latest_row.to_csv(os.path.join(data_dir, "latest_data.csv"), index=False)
+    
+    # Drop rows where target is NaN
+    df.dropna(inplace=True)
+    
     df.to_csv(config['data']['raw_data_path'], index=False)
     print(f"Data saved to {config['data']['raw_data_path']}")
     print(f"Shape: {df.shape}")
